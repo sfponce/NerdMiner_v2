@@ -631,15 +631,15 @@ void minerWorkerSw(void * task_id)
         {
           uint32_t test_nonce = current_sw_nonce + n;
           ((uint32_t*)(job->sha_buffer + 64 + 12))[0] = test_nonce;
-          if (nerd_sha256d_baked(job->midstate, job->sha_buffer + 64, job->bake, hash))
+          if (nerd_sha256d_baked(job->midstate, job->sha_buffer + 64, job->bake, hash) && isSha256Valid(hash))
           {
             double diff_hash = diff_from_target(hash);
-            if (diff_hash > best_diff)
+            if (diff_hash > 0.0 && diff_hash < 1e14 && diff_hash > best_diff)
             {
               best_diff = diff_hash;
               Serial.printf(">>> [SW BEST DIFF] %.6f (nonce 0x%08X)\n", best_diff, test_nonce);
             }
-            if (diff_hash > result->difficulty && isSha256Valid(hash))
+            if (diff_hash > result->difficulty)
             {
               result->difficulty = diff_hash;
               result->nonce = test_nonce;
@@ -1123,15 +1123,15 @@ void minerWorkerHw(void * task_id)
             valid = true;
           }
 
-          if (valid)
+          if (valid && isSha256Valid(hash))
           {
             double diff_hash = diff_from_target(hash);
-            if (diff_hash > best_diff)
+            if (diff_hash > 0.0 && diff_hash < 1e14 && diff_hash > best_diff)
             {
               best_diff = diff_hash;
               Serial.printf(">>> [HW BEST DIFF] %.6f (nonce 0x%08X)\n", best_diff, cand_nonce);
             }
-            if (diff_hash > job->difficulty && isSha256Valid(hash))
+            if (diff_hash > job->difficulty)
             {
               result->difficulty = diff_hash;
               result->nonce = cand_nonce;
@@ -1189,6 +1189,10 @@ void restoreStat() {
 
   size_t required_size = sizeof(double);
   nvs_get_blob(stat_handle, "best_diff", &best_diff, &required_size);
+  if (isnan(best_diff) || isinf(best_diff) || best_diff > 1e14 || best_diff < 0.0)
+  {
+    best_diff = 0.0;
+  }
   nvs_get_u32(stat_handle, "Mhashes", &Mhashes);
   uint32_t nv_shares, nv_valids;
   nvs_get_u32(stat_handle, "shares", &nv_shares);
@@ -1222,6 +1226,10 @@ void restoreStat() {
 
 void saveStat() {
   if(!Settings.saveStats) return;
+  if (isnan(best_diff) || isinf(best_diff) || best_diff > 1e14 || best_diff < 0.0)
+  {
+    best_diff = 0.0;
+  }
   Serial.printf("[MONITOR] Saving stats\n");
   nvs_set_blob(stat_handle, "best_diff", &best_diff, sizeof(best_diff));
   nvs_set_u32(stat_handle, "Mhashes", Mhashes);
