@@ -1070,19 +1070,17 @@ void minerWorkerHw(void * task_id)
       memcpy(sha_buffer, job->sha_buffer, 80);
 
       uint32_t current_nonce_swapped = __builtin_bswap32(job->nonce_start);
-      uint32_t nonce_end_swapped = current_nonce_swapped + job->nonce_count;
-      uint32_t batch_hashes = 0;
+      uint64_t batch_hashes = 0;
+      volatile bool active = (s_working_current_job_id == job_in_work);
 
-      while (current_nonce_swapped < nonce_end_swapped && s_working_current_job_id == job_in_work)
+      while (active && (batch_hashes < job->nonce_count))
       {
         bool candidate = sha256_pipelined_mine(
             sha_base,
             sha_buffer,
             &current_nonce_swapped,
-            nonce_end_swapped,
             &batch_hashes,
-            &s_working_current_job_id,
-            job_in_work
+            &active
         );
 
         if (candidate)
@@ -1099,7 +1097,7 @@ void minerWorkerHw(void * task_id)
               result->difficulty = diff_hash;
               result->nonce = cand_nonce_native;
               memcpy(result->hash, hash, sizeof(hash));
-              result->nonce_count = batch_hashes;
+              result->nonce_count = (uint32_t)batch_hashes;
               {
                 std::lock_guard<std::mutex> lock(s_job_mutex);
                 if (s_job_result_list.size() < 16)
@@ -1116,11 +1114,12 @@ void minerWorkerHw(void * task_id)
 
         if (s_working_current_job_id != job_in_work)
         {
+          active = false;
           break;
         }
       }
 
-      result->nonce_count = batch_hashes;
+      result->nonce_count = (uint32_t)batch_hashes;
     } else
     {
       vTaskDelay(2 / portTICK_PERIOD_MS);
