@@ -90,8 +90,17 @@ bool IRAM_ATTR sha256_pipelined_mine(
         "l32i    a3,  %[IN],   72 \n"
         "s32i.n  a3,  %[sb],    8 \n"
 
-        // Store nonce (from register a2)
-        "s32i.n    a2, %[sb], 12 \n"
+        // Store nonce: compute big-endian bswap32(a2) into a3 using scratch a4
+        "extui    a3, a2, 24, 8 \n"
+        "slli     a4, a2, 24    \n"
+        "or       a3, a3, a4    \n"
+        "extui    a4, a2, 8,  8 \n"
+        "slli     a4, a4, 16    \n"
+        "or       a3, a3, a4    \n"
+        "extui    a4, a2, 16, 8 \n"
+        "slli     a4, a4, 8     \n"
+        "or       a3, a3, a4    \n"
+        "s32i.n   a3, %[sb], 12 \n"
 
         // Store padding: 0x80000000 at word 4, length at word 15
         "s32i.n    %[pad2], %[sb], 16 \n"
@@ -175,9 +184,8 @@ bool IRAM_ATTR sha256_pipelined_mine(
         "beqz.n a3, proc_end     \n"      // Exit if mining stopped
 
         // ===== EARLY REJECT: Check top 16 bits of hash =====
-        // Word 7 (offset 28) contains H0 - most significant bits
-        // For valid hash, upper 16 bits must be zero
-        "l16ui  a3, %[sb], 28         \n" // Load upper 16 bits of H0
+        // Word 7 (bytes 28-31): bits 0-15 at offset 28 are the leading zeros after byte swap
+        "l16ui  a3, %[sb], 28         \n" // Load bits 0-15 of Word 7
         "beqz.n a3, proc_end          \n" // Exit if potential share found!
         "j proc_start                 \n" // Otherwise, try next nonce
 

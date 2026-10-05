@@ -439,7 +439,30 @@ pool_data getPoolData(void){
           if (btcWallet.indexOf(".")>0) btcWallet = btcWallet.substring(0,btcWallet.indexOf("."));
           String requestUrl = getPoolAPIUrl() + btcWallet;
           Serial.println("Pool API : " + requestUrl);
-          http.begin(client, requestUrl);
+          
+          String host = "";
+          uint16_t port = 443;
+          String uri = "/";
+          bool isHttps = requestUrl.startsWith("https://");
+          int prefixLen = isHttps ? 8 : 7;
+          String withoutPrefix = requestUrl.substring(prefixLen);
+          int slashIdx = withoutPrefix.indexOf('/');
+          if (slashIdx >= 0) {
+            String hostPort = withoutPrefix.substring(0, slashIdx);
+            uri = withoutPrefix.substring(slashIdx);
+            int colonIdx = hostPort.indexOf(':');
+            if (colonIdx >= 0) {
+              host = hostPort.substring(0, colonIdx);
+              port = hostPort.substring(colonIdx + 1).toInt();
+            } else {
+              host = hostPort;
+              port = isHttps ? 443 : 80;
+            }
+          } else {
+            host = withoutPrefix;
+            port = isHttps ? 443 : 80;
+          }
+          http.begin(client, host, port, uri, isHttps);
           int httpCode = http.GET();
           if (httpCode == HTTP_CODE_OK) {
               String payload = http.getString();

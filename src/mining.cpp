@@ -408,7 +408,7 @@ void runStratumWorker(void *name) {
                                               #endif
                                               #ifdef HARDWARE_SHA265
                                                 #if defined(CONFIG_IDF_TARGET_ESP32)
-                                                  JobPush( s_job_request_list_hw, job_pool, nonce_pool, NONCE_PER_JOB_HW, currentPoolDifficulty, sha_buffer_swap, hw_midstate, bake);
+                                                  JobPush( s_job_request_list_hw, job_pool, nonce_pool, NONCE_PER_JOB_HW, currentPoolDifficulty, mMiner.bytearray_blockheader, diget_mid, bake);
                                                 #else
                                                   JobPush( s_job_request_list_hw, job_pool, nonce_pool, NONCE_PER_JOB_HW, currentPoolDifficulty, mMiner.bytearray_blockheader, hw_midstate, bake);
                                                 #endif
@@ -532,7 +532,7 @@ void runStratumWorker(void *name) {
       while (s_job_request_list_hw.size() < 4)
       {
         #if defined(CONFIG_IDF_TARGET_ESP32)
-          JobPush( s_job_request_list_hw, job_pool, nonce_pool, NONCE_PER_JOB_HW, currentPoolDifficulty, sha_buffer_swap, hw_midstate, bake);
+          JobPush( s_job_request_list_hw, job_pool, nonce_pool, NONCE_PER_JOB_HW, currentPoolDifficulty, mMiner.bytearray_blockheader, diget_mid, bake);
         #else
           JobPush( s_job_request_list_hw, job_pool, nonce_pool, NONCE_PER_JOB_HW, currentPoolDifficulty, mMiner.bytearray_blockheader, hw_midstate, bake);
         #endif
@@ -634,6 +634,11 @@ void minerWorkerSw(void * task_id)
           if (nerd_sha256d_baked(job->midstate, job->sha_buffer + 64, job->bake, hash))
           {
             double diff_hash = diff_from_target(hash);
+            if (diff_hash > best_diff)
+            {
+              best_diff = diff_hash;
+              Serial.printf(">>> [SW BEST DIFF] %.6f (nonce 0x%08X)\n", best_diff, test_nonce);
+            }
             if (diff_hash > result->difficulty && isSha256Valid(hash))
             {
               result->difficulty = diff_hash;
@@ -1086,9 +1091,10 @@ void minerWorkerHw(void * task_id)
       result->nonce_count = job->nonce_count;
       result->difficulty = job->difficulty;
       uint8_t job_in_work = job->id & 0xFF;
-      memcpy(sha_buffer, job->sha_buffer, 80);
+      for (int i = 0; i < 20; ++i)
+        sha_buffer[i] = __builtin_bswap32(((uint32_t*)job->sha_buffer)[i]);
 
-      uint32_t current_nonce_swapped = __builtin_bswap32(job->nonce_start);
+      uint32_t current_nonce = job->nonce_start;
       uint64_t batch_hashes = 0;
       volatile bool active = (s_working_current_job_id == job_in_work);
 
@@ -1097,26 +1103,41 @@ void minerWorkerHw(void * task_id)
         bool candidate = sha256_pipelined_mine(
             sha_base,
             sha_buffer,
-            &current_nonce_swapped,
+            &current_nonce,
             &batch_hashes,
             &active
         );
 
         if (candidate)
         {
-          uint32_t cand_nonce_swapped = current_nonce_swapped - 1;
-          uint32_t cand_nonce_native = __builtin_bswap32(cand_nonce_swapped);
+          uint32_t cand_nonce = current_nonce - 1;
+          bool valid = false;
 
-          ((uint32_t*)(job->sha_buffer + 64 + 12))[0] = cand_nonce_native;
+          ((uint32_t*)(job->sha_buffer + 64 + 12))[0] = cand_nonce;
           if (nerd_sha256d_baked(job->midstate, job->sha_buffer + 64, job->bake, hash))
           {
+            valid = true;
+          }
+          else if (nerd_sha_ll_read_digest_swap_if(hash))
+          {
+            valid = true;
+          }
+
+          if (valid)
+          {
             double diff_hash = diff_from_target(hash);
+            if (diff_hash > best_diff)
+            {
+              best_diff = diff_hash;
+              Serial.printf(">>> [HW BEST DIFF] %.6f (nonce 0x%08X)\n", best_diff, cand_nonce);
+            }
             if (diff_hash > job->difficulty && isSha256Valid(hash))
             {
               result->difficulty = diff_hash;
-              result->nonce = cand_nonce_native;
+              result->nonce = cand_nonce;
               memcpy(result->hash, hash, sizeof(hash));
               result->nonce_count = (uint32_t)batch_hashes;
+              Serial.printf(">>> [HW SHARE FOUND] Nonce: 0x%08X, Diff: %.6f >= PoolDiff: %.4f\n", cand_nonce, diff_hash, job->difficulty);
               {
                 std::lock_guard<std::mutex> lock(s_job_mutex);
                 if (s_job_result_list.size() < 16)
