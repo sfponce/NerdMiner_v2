@@ -172,7 +172,7 @@ void setup()
 #if (SOC_CPU_CORES_NUM >= 2)
   #if defined(CONFIG_IDF_TARGET_ESP32)
   // Software miner on Core 0 running at low priority during spare CPU cycles
-  xTaskCreatePinnedToCore(minerWorkerSw, "MinerSw-1", 5000, (void*)1, 1, &minerTask2, 0);
+  xTaskCreatePinnedToCore(minerWorkerSw, "MinerSw-1", 6144, (void*)1, 1, &minerTask2, 0);
   #else
   xTaskCreate(minerWorkerSw, "MinerSw-1", 6000, (void*)1, 1, &minerTask2);
   #endif

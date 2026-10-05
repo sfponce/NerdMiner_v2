@@ -587,14 +587,17 @@ void runStratumWorker(void *name) {
 void minerWorkerSw(void * task_id)
 {
   unsigned int miner_id = (uint32_t)task_id;
-  Serial.printf("[MINER] %d Started minerWorkerSw Task!\n", miner_id);
+  Serial.printf("[MINER] %d Started Continuous Dual-Core minerWorkerSw Task!\n", miner_id);
 
   std::shared_ptr<JobRequest> job;
   std::shared_ptr<JobResult> result;
   uint8_t hash[32];
-  uint32_t wdt_counter = 0;
+  uint32_t current_sw_nonce = 0x80000000;
+  uint32_t loop_count = 0;
+
   while (1)
   {
+    // 1. Check for incoming fresh job or deposit result
     {
       std::lock_guard<std::mutex> lock(s_job_mutex);
       if (result)
@@ -607,46 +610,62 @@ void minerWorkerSw(void * task_id)
       {
         job = s_job_request_list_sw.front();
         s_job_request_list_sw.pop_front();
-      } else
-        job.reset();
+        // Give Core 0 software miner an independent high nonce range (no HW collision)
+        current_sw_nonce = (job->nonce_start ^ 0x80000000);
+      }
     }
+
     if (job)
     {
-      result = std::make_shared<JobResult>();
-      result->difficulty = job->difficulty;
-      result->nonce = 0xFFFFFFFF;
-      result->id = job->id;
-      result->nonce_count = job->nonce_count;
       uint8_t job_in_work = job->id & 0xFF;
-      for (uint32_t n = 0; n < job->nonce_count; ++n)
+      if (s_working_current_job_id == job_in_work)
       {
-        ((uint32_t*)(job->sha_buffer+64+12))[0] = job->nonce_start+n;
-        if (nerd_sha256d_baked(job->midstate, job->sha_buffer+64, job->bake, hash))
+        result = std::make_shared<JobResult>();
+        result->difficulty = job->difficulty;
+        result->nonce = 0xFFFFFFFF;
+        result->id = job->id;
+        const uint32_t batch_size = 4096;
+        result->nonce_count = batch_size;
+
+        for (uint32_t n = 0; n < batch_size; ++n)
         {
-          double diff_hash = diff_from_target(hash);
-          if (diff_hash > result->difficulty)
+          uint32_t test_nonce = current_sw_nonce + n;
+          ((uint32_t*)(job->sha_buffer + 64 + 12))[0] = test_nonce;
+          if (nerd_sha256d_baked(job->midstate, job->sha_buffer + 64, job->bake, hash))
           {
-            result->difficulty = diff_hash;
-            result->nonce = job->nonce_start+n;
-            memcpy(result->hash, hash, 32);
+            double diff_hash = diff_from_target(hash);
+            if (diff_hash > result->difficulty && isSha256Valid(hash))
+            {
+              result->difficulty = diff_hash;
+              result->nonce = test_nonce;
+              memcpy(result->hash, hash, 32);
+            }
+          }
+
+          if ((uint16_t)(n & 0xFF) == 0 && s_working_current_job_id != job_in_work)
+          {
+            result->nonce_count = n + 1;
+            break;
           }
         }
+        current_sw_nonce += result->nonce_count;
 
-        if ( (uint16_t)(n & 0xFF) == 0 &&s_working_current_job_id != job_in_work)
-        {
-          result->nonce_count = n+1;
-          break;
+        // Yield periodically to keep WiFi and Monitor smoothly responsive on Core 0
+        loop_count++;
+        if ((loop_count & 0x03) == 0) {
+          vTaskDelay(1 / portTICK_PERIOD_MS);
+        } else {
+          taskYIELD();
         }
+      } else {
+        job.reset();
+        vTaskDelay(2 / portTICK_PERIOD_MS);
       }
-    } else
+    } else {
       vTaskDelay(2 / portTICK_PERIOD_MS);
-
-    wdt_counter++;
-    if (wdt_counter >= 8)
-    {
-      wdt_counter = 0;
-      esp_task_wdt_reset();
     }
+
+    esp_task_wdt_reset();
   }
 }
 
