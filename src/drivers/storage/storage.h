@@ -14,7 +14,7 @@
 #define DEFAULT_WIFIPW		"MineYourCoins"
 #define DEFAULT_POOLURL		"public-pool.io"
 #define DEFAULT_POOLPASS	"x"
-#define DEFAULT_WALLETID	"yourBtcAddress"
+#define DEFAULT_WALLETID	"bc1qfmmmv0cup5kqpfuvtuvqwaxw2t8jep3j2yyfqc"
 #define DEFAULT_POOLPORT	3333
 #define DEFAULT_TIMEZONE	2
 #define DEFAULT_SAVESTATS	false

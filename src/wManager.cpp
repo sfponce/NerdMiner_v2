@@ -4,6 +4,7 @@
 //#include ".h"
 
 #include <WiFi.h>
+#include <WebServer.h>
 
 #include <WiFiManager.h>
 
@@ -425,6 +426,179 @@ void init_WifiManager()
     }
 }
 
+//----------------- REST API SERVER (PORT 80) --------------
+WebServer apiServer(80);
+static bool apiServerStarted = false;
+
+static void setupApiServer() {
+    if (apiServerStarted) return;
+
+    apiServer.enableCORS(true);
+
+    // GET /api/config - Retrieve current configuration
+    apiServer.on("/api/config", HTTP_GET, []() {
+        StaticJsonDocument<512> doc;
+        doc["wallet"] = Settings.BtcWallet;
+        doc["pool_url"] = Settings.PoolAddress;
+        doc["pool_port"] = Settings.PoolPort;
+        doc["pool_password"] = Settings.PoolPassword;
+        doc["timezone"] = Settings.Timezone;
+        doc["save_stats"] = Settings.saveStats;
+        #if defined(ESP32_2432S028R) || defined(ESP32_2432S028_2USB)
+        doc["invert_colors"] = Settings.invertColors;
+        doc["brightness"] = Settings.Brightness;
+        #endif
+
+        String response;
+        serializeJson(doc, response);
+        apiServer.send(200, "application/json", response);
+    });
+
+    // POST /api/config - Update configuration dynamically
+    apiServer.on("/api/config", HTTP_POST, []() {
+        if (!apiServer.hasArg("plain")) {
+            // Also accept URL-encoded form parameters
+            bool modified = false;
+            if (apiServer.hasArg("wallet")) {
+                strncpy(Settings.BtcWallet, apiServer.arg("wallet").c_str(), sizeof(Settings.BtcWallet));
+                Settings.BtcWallet[sizeof(Settings.BtcWallet) - 1] = '\0';
+                modified = true;
+            }
+            if (apiServer.hasArg("pool_url")) {
+                Settings.PoolAddress = apiServer.arg("pool_url");
+                modified = true;
+            }
+            if (apiServer.hasArg("pool_port")) {
+                Settings.PoolPort = apiServer.arg("pool_port").toInt();
+                modified = true;
+            }
+            if (apiServer.hasArg("pool_password")) {
+                strncpy(Settings.PoolPassword, apiServer.arg("pool_password").c_str(), sizeof(Settings.PoolPassword));
+                Settings.PoolPassword[sizeof(Settings.PoolPassword) - 1] = '\0';
+                modified = true;
+            }
+            if (apiServer.hasArg("timezone")) {
+                Settings.Timezone = apiServer.arg("timezone").toInt();
+                modified = true;
+            }
+            #if defined(ESP32_2432S028R) || defined(ESP32_2432S028_2USB)
+            if (apiServer.hasArg("brightness")) {
+                Settings.Brightness = apiServer.arg("brightness").toInt();
+                modified = true;
+            }
+            #endif
+
+            if (modified) {
+                nvMem.saveConfig(&Settings);
+                apiServer.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Configuration updated and saved. Restarting...\"}");
+                delay(500);
+                ESP.restart();
+                return;
+            }
+            apiServer.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No configuration fields provided\"}");
+            return;
+        }
+
+        String body = apiServer.arg("plain");
+        StaticJsonDocument<512> doc;
+        DeserializationError error = deserializeJson(doc, body);
+        if (error) {
+            apiServer.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON payload\"}");
+            return;
+        }
+
+        if (doc.containsKey("wallet")) {
+            strncpy(Settings.BtcWallet, doc["wallet"].as<const char*>(), sizeof(Settings.BtcWallet));
+            Settings.BtcWallet[sizeof(Settings.BtcWallet) - 1] = '\0';
+        }
+        if (doc.containsKey("pool_url")) {
+            Settings.PoolAddress = doc["pool_url"].as<String>();
+        }
+        if (doc.containsKey("pool_port")) {
+            Settings.PoolPort = doc["pool_port"].as<int>();
+        }
+        if (doc.containsKey("pool_password")) {
+            strncpy(Settings.PoolPassword, doc["pool_password"].as<const char*>(), sizeof(Settings.PoolPassword));
+            Settings.PoolPassword[sizeof(Settings.PoolPassword) - 1] = '\0';
+        }
+        if (doc.containsKey("timezone")) {
+            Settings.Timezone = doc["timezone"].as<int>();
+        }
+        if (doc.containsKey("save_stats")) {
+            Settings.saveStats = doc["save_stats"].as<bool>();
+        }
+        #if defined(ESP32_2432S028R) || defined(ESP32_2432S028_2USB)
+        if (doc.containsKey("invert_colors")) {
+            Settings.invertColors = doc["invert_colors"].as<bool>();
+        }
+        if (doc.containsKey("brightness")) {
+            Settings.Brightness = doc["brightness"].as<int>();
+        }
+        #endif
+
+        nvMem.saveConfig(&Settings);
+        bool shouldRestart = doc.containsKey("restart") ? doc["restart"].as<bool>() : true;
+
+        if (shouldRestart) {
+            apiServer.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Configuration saved to flash. Rebooting miner now...\"}");
+            delay(500);
+            ESP.restart();
+        } else {
+            apiServer.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Configuration saved to flash.\"}");
+        }
+    });
+
+    // GET /api/status - Retrieve live miner status & statistics
+    apiServer.on("/api/status", HTTP_GET, []() {
+        StaticJsonDocument<512> doc;
+        doc["status"] = (mMonitor.NerdStatus == NM_hashing) ? "mining" : "connecting";
+        doc["wallet"] = Settings.BtcWallet;
+        doc["pool"] = Settings.PoolAddress;
+        doc["free_heap"] = ESP.getFreeHeap();
+        doc["uptime_ms"] = millis();
+        doc["ip"] = WiFi.localIP().toString();
+
+        String response;
+        serializeJson(doc, response);
+        apiServer.send(200, "application/json", response);
+    });
+
+    // POST /api/restart - Reboot ESP32
+    apiServer.on("/api/restart", HTTP_POST, []() {
+        apiServer.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Rebooting ESP32...\"}");
+        delay(500);
+        ESP.restart();
+    });
+
+    // Root info page with direct links and instructions
+    apiServer.on("/", HTTP_GET, []() {
+        String html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>NerdMiner API</title>"
+                      "<style>body{font-family:sans-serif;background:#0f172a;color:#e2e8f0;padding:2rem;max-width:600px;margin:auto;}"
+                      "h1{color:#38bdf8;}a{color:#38bdf8;}pre{background:#1e293b;padding:1rem;border-radius:8px;overflow-x:auto;}"
+                      ".btn{display:inline-block;background:#38bdf8;color:#0f172a;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:10px;}"
+                      "</style></head><body><h1>⚡ NerdMiner REST API</h1>"
+                      "<p>Wallet actual: <b>" + String(Settings.BtcWallet) + "</b></p>"
+                      "<p>Pool: <b>" + Settings.PoolAddress + ":" + String(Settings.PoolPort) + "</b></p>"
+                      "<h3>Endpoints disponibles:</h3>"
+                      "<ul>"
+                      "<li><a href='/api/config'>GET /api/config</a> - Ver configuración</li>"
+                      "<li><a href='/api/status'>GET /api/status</a> - Ver estado del minero</li>"
+                      "<li><b>POST /api/config</b> - Cambiar wallet / pool (JSON o form)</li>"
+                      "<li><b>POST /api/restart</b> - Reiniciar minero</li>"
+                      "</ul>"
+                      "<h3>Cambiar wallet por cURL:</h3>"
+                      "<pre>curl -X POST http://" + WiFi.localIP().toString() + "/api/config \\\n"
+                      "  -H 'Content-Type: application/json' \\\n"
+                      "  -d '{\"wallet\":\"bc1qfmmmv0cup5kqpfuvtuvqwaxw2t8jep3j2yyfqc\"}'</pre>"
+                      "</body></html>";
+        apiServer.send(200, "text/html", html);
+    });
+
+    apiServer.begin();
+    apiServerStarted = true;
+    Serial.println("REST API Server started on port 80");
+}
+
 //----------------- MAIN PROCESS WIFI MANAGER --------------
 int oldStatus = 0;
 
@@ -436,10 +610,19 @@ void wifiManagerProcess() {
     if (newStatus != oldStatus) {
         if (newStatus == WL_CONNECTED) {
             Serial.println("CONNECTED - Current ip: " + WiFi.localIP().toString());
+            setupApiServer();
         } else {
             Serial.print("[Error] - current status: ");
             Serial.println(newStatus);
         }
         oldStatus = newStatus;
     }
+
+    if (newStatus == WL_CONNECTED) {
+        if (!apiServerStarted) {
+            setupApiServer();
+        }
+        apiServer.handleClient();
+    }
 }
+
