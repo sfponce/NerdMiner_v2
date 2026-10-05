@@ -16,8 +16,8 @@
 #include "drivers/storage/nvMemory.h"
 #include "drivers/storage/storage.h"
 
-#define WIDTH 320
-#define HEIGHT 240 
+#define WIDTH 130 //320
+#define HEIGHT 170 
 
 extern nvMemory nvMem;
 
@@ -209,356 +209,318 @@ void printPoolData(){
 
 
 
-// ================= Clean Tech Color Palette (RGB565) =================
-#define CT_BG           0x0862  // Deep dark slate/navy (#0a0e17)
-#define CT_CARD_BG      0x10E4  // Dark slate card background (#151c28)
-#define CT_CARD_BORDER  0x21E8  // Subtle card border (#283548)
-#define CT_CYAN         0x06BF  // Electric Cyan (#00d4ff)
-#define CT_TEAL         0x2EB8  // Mint/Teal (#2dd4bf)
-#define CT_ORANGE       0xFD20  // Bitcoin Orange (#f7931a)
-#define CT_GREEN        0x1706  // Emerald Green (#10b981)
-#define CT_RED          0xF9A7  // Crimson Red (#f43f5e)
-#define CT_TEXT_LIGHT   0xFFFF  // Crisp White (#ffffff)
-#define CT_TEXT_MUTED   0x9CF3  // Slate Gray (#94a3b8)
-#define CT_TEXT_DARK    0x632C  // Dim Slate (#64748b)
-
-static void drawCleanTechHeader(const char* screenName, const String& temp, const String& time) {
-  tft.fillRect(0, 0, 320, 26, CT_BG);
-  tft.fillCircle(10, 13, 3, CT_GREEN);
-  tft.setTextColor(CT_CYAN, CT_BG);
-  tft.drawString("NERDMINER", 18, 5, 2);
-  tft.setTextColor(CT_TEXT_MUTED, CT_BG);
-  tft.drawString(screenName, 115, 5, 2);
-  tft.setTextColor(CT_ORANGE, CT_BG);
-  tft.drawString((temp + "C").c_str(), 220, 5, 2);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_BG);
-  tft.drawString(time.c_str(), 262, 5, 2);
-  tft.drawFastHLine(0, 25, 320, CT_CARD_BORDER);
-}
-
-static void drawCleanTechFooter(uint8_t screenIdx, uint8_t totalScreens) {
-  tft.fillRect(0, 220, 320, 20, CT_BG);
-  tft.drawFastHLine(0, 220, 320, CT_CARD_BORDER);
-  tft.setTextColor(CT_TEXT_DARK, CT_BG);
-  tft.drawString("< PREV", 8, 223, 2);
-  char buf[28];
-  snprintf(buf, sizeof(buf), "CLEANTECH %d/%d", screenIdx, totalScreens);
-  tft.setTextColor(CT_TEXT_MUTED, CT_BG);
-  tft.drawCentreString(buf, 160, 223, 2);
-  tft.setTextColor(CT_TEXT_DARK, CT_BG);
-  tft.drawString("NEXT >", 265, 223, 2);
-}
-
 void esp32_2432S028R_MinerScreen(unsigned long mElapsed)
 {
   mining_data data = getMiningData(mElapsed);
 
-  if (hasChangedScreen) {
-    tft.fillScreen(CT_BG);
-    drawCleanTechHeader("DASHBOARD", data.temp, data.currentTime);
-    drawCleanTechFooter(1, 4);
+  printPoolData();
 
-    // Hero Card Frame (Hashrate)
-    tft.fillRoundRect(6, 28, 308, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 28, 308, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 34, 3, 10, CT_CYAN);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("HASHRATE", 22, 32, 2);
-    tft.setTextColor(CT_TEAL, CT_CARD_BG);
-    tft.drawString("XTENSA LX6 - 240MHz", 150, 32, 2);
+  if (hasChangedScreen) tft.pushImage(0, 0, initWidth, initHeight, MinerScreen);
+    
+  hasChangedScreen = false; 
+ 
+  int wdtOffset = 190;
+  // Recreate sprite to the right side of the screen
+  createBackgroundSprite(WIDTH-5, HEIGHT-7);
+  //Print background screen    
+  background.pushImage(-190, 0, MinerWidth, MinerHeight, MinerScreen);
+  
+  // Total hashes
+  render.setFontSize(18);
+  render.rdrawString(data.totalMHashes.c_str(), 268-wdtOffset, 138, TFT_BLACK);
 
-    // Left Bottom Card Frame (Shares & Blocks)
-    tft.fillRoundRect(6, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 130, 3, 10, CT_GREEN);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("SHARES & DIFF", 22, 128, 2);
+  // Block templates
+  render.setFontSize(18);
+  render.setAlignment(Align::TopLeft);
+  render.drawString(data.templates.c_str(), 189-wdtOffset, 20, 0xDEDB);
+  // Best diff
+  render.drawString(data.bestDiff.c_str(), 189-wdtOffset, 48, 0xDEDB);
+  // 32Bit shares
+  render.setFontSize(18);
+  render.drawString(data.completedShares.c_str(), 189-wdtOffset, 76, 0xDEDB);
+  // Hores
+  render.setFontSize(14);
+  render.rdrawString(data.timeMining.c_str(), 315-wdtOffset, 104, 0xDEDB);
 
-    // Right Bottom Card Frame (Pool & System)
-    tft.fillRoundRect(163, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(163, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(171, 130, 3, 10, CT_ORANGE);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("POOL & TIME", 179, 128, 2);
+  // Valid Blocks
+  render.setFontSize(24);
+  render.setAlignment(Align::TopCenter);
+  render.drawString(data.valids.c_str(), 290-wdtOffset, 56, 0xDEDB);
 
-    hasChangedScreen = false;
-  }
+  // Print Temp
+  render.setFontSize(10);
+  render.rdrawString(data.temp.c_str(), 239-wdtOffset, 1, TFT_BLACK);
 
-  // Dynamic Header Update
-  drawCleanTechHeader("DASHBOARD", data.temp, data.currentTime);
+  render.setFontSize(4);
+  render.rdrawString(String(0).c_str(), 244-wdtOffset, 3, TFT_BLACK);
 
-  // Dynamic Hero Card
-  tft.fillRect(14, 48, 290, 48, CT_CARD_BG);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  tft.drawString(data.currentHashRate.c_str(), 18, 50, 6);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString("KH/s", 225, 68, 4);
+  // Print Hour
+  render.setFontSize(10);
+  render.rdrawString(data.currentTime.c_str(), 286-wdtOffset, 1, TFT_BLACK);
 
-  // Progress/Activity line in hero card
-  tft.fillRoundRect(18, 104, 170, 4, 2, CT_CARD_BORDER);
-  tft.fillRoundRect(18, 104, 120, 4, 2, CT_CYAN);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.fillRect(195, 100, 110, 16, CT_CARD_BG);
-  tft.drawString((data.totalMHashes + " MH").c_str(), 195, 100, 2);
+  // Push prepared background to screen
+  background.pushSprite(190, 0);
 
-  // Dynamic Left Card (Shares & Diff)
-  tft.fillRect(14, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_GREEN, CT_CARD_BG);
-  tft.drawString(data.completedShares.c_str(), 18, 146, 4);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString("Accepted", 85, 152, 2);
-  tft.setTextColor(CT_ORANGE, CT_CARD_BG);
-  tft.drawString(("Best: " + data.bestDiff).c_str(), 18, 176, 2);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString(("Blocks: " + data.valids).c_str(), 18, 194, 2);
+  // Delete sprite to free the memory heap
+  background.deleteSprite();   
+  // printheap();
 
-  // Dynamic Right Card (Pool & System)
-  tft.fillRect(171, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  String poolDisplay = Settings.PoolAddress;
-  if (poolDisplay.length() > 14) poolDisplay = poolDisplay.substring(0, 14);
-  tft.drawString(poolDisplay.c_str(), 171, 146, 2);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString(data.timeMining.c_str(), 171, 168, 2);
-  tft.setTextColor(CT_TEAL, CT_CARD_BG);
-  tft.drawString("Pipelined ASM", 171, 192, 2);
+   //Serial.println("=========== Mining Display ==============") ;
+  // Create background sprite to print data at once
+  createBackgroundSprite(WIDTH-7, HEIGHT-100); // initHeight); //Background Sprite
+  //Print background screen    
+  background.pushImage(0, -90, MinerWidth, MinerHeight, MinerScreen);
+
+  // Hashrate 
+  render.setFontSize(35);
+  render.setCursor(19, 118);
+  render.setFontColor(TFT_BLACK);
+  render.rdrawString(data.currentHashRate.c_str(), 118, 114-90, TFT_BLACK);
+  
+  // Push prepared background to screen
+  background.pushSprite(0, 90);
+  
+  // Delete sprite to free the memory heap
+  background.deleteSprite();  
 
   Serial.printf(">>> Completed %s share(s), %s Khashes, avg. hashrate %s KH/s\n",
-                data.completedShares.c_str(), data.totalKHashes.c_str(), data.currentHashRate.c_str());
+                data.completedShares.c_str(), data.totalKHashes.c_str(), data.currentHashRate.c_str()); 
+   
+  #ifdef DEBUG_MEMORY
+    // Print heap
+    printheap();
+  #endif
 }
 
 void esp32_2432S028R_ClockScreen(unsigned long mElapsed)
 {
+
+  if (hasChangedScreen) tft.pushImage(0, 0, minerClockWidth, minerClockHeight, minerClockScreen);
+  
+  printPoolData();
+
+  hasChangedScreen = false;
+
   clock_data data = getClockData(mElapsed);
 
-  if (hasChangedScreen) {
-    tft.fillScreen(CT_BG);
-    drawCleanTechHeader("CLOCK & BTC", data.currentHashRate, data.currentTime);
-    drawCleanTechFooter(2, 4);
+ // Create background sprite to print data at once
+  createBackgroundSprite(270,36);
 
-    // Hero Clock Card Frame
-    tft.fillRoundRect(6, 28, 308, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 28, 308, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 34, 3, 10, CT_CYAN);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("BITCOIN NETWORK TIME", 22, 32, 2);
+  // Print background screen
+  background.pushImage(0, -130, minerClockWidth, minerClockHeight, minerClockScreen);
+  // Hashrate
+  render.setFontSize(25);
+  render.setFontColor(TFT_BLACK);
+  render.rdrawString(data.currentHashRate.c_str(), 95, 0, TFT_BLACK);
 
-    // Left Card Frame (BTC Price)
-    tft.fillRoundRect(6, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 130, 3, 10, CT_ORANGE);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("BITCOIN PRICE", 22, 128, 2);
+  // Print BlockHeight
+  render.setFontSize(18);
+  render.rdrawString(data.blockHeight.c_str(), 254, 9, TFT_BLACK);
 
-    // Right Card Frame (Hashrate & Diff)
-    tft.fillRoundRect(163, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(163, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(171, 130, 3, 10, CT_TEAL);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("MINER STATS", 179, 128, 2);
+  // Push prepared background to screen
+  background.pushSprite(0, 130);
+  // Delete sprite to free the memory heap
+  background.deleteSprite(); 
 
-    hasChangedScreen = false;
-  }
+  createBackgroundSprite(169,105);
+  // Print background screen
+  background.pushImage(-130, -3, minerClockWidth, minerClockHeight, minerClockScreen);
+  
+  // Print BTC Price
+  background.setFreeFont(FSSB9);
+  background.setTextSize(1);
+  background.setTextDatum(TL_DATUM);
+  background.setTextColor(TFT_BLACK);
+  background.drawString(data.btcPrice.c_str(), 202-130, 0, GFXFF);
+ 
+  // Print Hour
+  background.setFreeFont(FF23);
+  background.setTextSize(2);
+  background.setTextColor(0xDEDB, TFT_BLACK);
+  background.drawString(data.currentTime.c_str(), 0, 50, GFXFF);
+ 
+  // Push prepared background to screen
+  background.pushSprite(130, 3);
 
-  drawCleanTechHeader("CLOCK & BTC", data.currentHashRate, data.currentTime);
-
-  // Big Clock in Hero Card
-  tft.fillRect(14, 48, 290, 48, CT_CARD_BG);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  tft.drawString(data.currentTime.c_str(), 18, 50, 6);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString(data.currentDate.c_str(), 18, 98, 2);
-
-  // BTC Price Card
-  tft.fillRect(14, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_ORANGE, CT_CARD_BG);
-  tft.drawString(data.btcPrice.c_str(), 18, 146, 4);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString(("Block: #" + data.blockHeight).c_str(), 18, 180, 2);
-
-  // Right Card (Hashrate / Shares)
-  tft.fillRect(171, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_TEAL, CT_CARD_BG);
-  tft.drawString((data.currentHashRate + " KH/s").c_str(), 171, 146, 2);
-  tft.setTextColor(CT_GREEN, CT_CARD_BG);
-  tft.drawString((data.completedShares + " shares").c_str(), 171, 168, 2);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString("Dual-Core 240MHz", 171, 192, 2);
+  // Delete sprite to free the memory heap
+  background.deleteSprite();   
 
   Serial.printf(">>> Completed %s share(s), %s Khashes, avg. hashrate %s KH/s\n",
                 data.completedShares.c_str(), data.totalKHashes.c_str(), data.currentHashRate.c_str());
+
+  #ifdef DEBUG_MEMORY
+  // Print heap
+  printheap();
+  #endif
 }
 
 void esp32_2432S028R_GlobalHashScreen(unsigned long mElapsed)
 {
+  if (hasChangedScreen) tft.pushImage(0, 0, globalHashWidth, globalHashHeight, globalHashScreen);
+  
+  printPoolData();
+  
+  hasChangedScreen = false;
+  
   coin_data data = getCoinData(mElapsed);
 
-  if (hasChangedScreen) {
-    tft.fillScreen(CT_BG);
-    drawCleanTechHeader("GLOBAL STATS", data.currentHashRate, data.currentTime);
-    drawCleanTechFooter(3, 4);
+  // Create background sprite to print data at once
+  createBackgroundSprite(169,105);
+  // Print background screen
+  background.pushImage(-160, -3, minerClockWidth, minerClockHeight, globalHashScreen);
+  
+  // Print BTC Price
+  background.setFreeFont(FSSB9);
+  background.setTextSize(1);
+  background.setTextDatum(TL_DATUM);
+  background.setTextColor(TFT_BLACK);
+  background.drawString(data.btcPrice.c_str(), 198-160, 0, GFXFF);
+  // Print Hour
+  background.setFreeFont(FSSB9);
+  background.setTextSize(1);
+  background.setTextDatum(TL_DATUM);
+  background.setTextColor(TFT_BLACK);
+  background.drawString(data.currentTime.c_str(), 268-160, 0, GFXFF);
 
-    // Hero Global Hash Card Frame
-    tft.fillRoundRect(6, 28, 308, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 28, 308, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 34, 3, 10, CT_CYAN);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("GLOBAL HASHRATE", 22, 32, 2);
+  // Print Last Pool Block
+  background.setFreeFont(FSS9);
+  background.setTextDatum(TR_DATUM);
+  background.setTextColor(0x9C92);
+  background.drawString(data.halfHourFee.c_str(), 302-160, 49, GFXFF);
 
-    // Left Card Frame (Difficulty)
-    tft.fillRoundRect(6, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 130, 3, 10, CT_ORANGE);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("NETWORK DIFF", 22, 128, 2);
+  // Print Difficulty
+  background.setFreeFont(FSS9);
+  background.setTextDatum(TR_DATUM);
+  background.setTextColor(0x9C92);
+  background.drawString(data.netwrokDifficulty.c_str(), 302-160, 85, GFXFF);
+  // Push prepared background to screen
+  background.pushSprite(160, 3);
+  // Delete sprite to free the memory heap
+  background.deleteSprite();   
 
-    // Right Card Frame (Halving / Block)
-    tft.fillRoundRect(163, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(163, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(171, 130, 3, 10, CT_TEAL);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("BLOCK & FEES", 179, 128, 2);
+ // Create background sprite to print data at once
+  createBackgroundSprite(280,30);
+  // Print background screen
+  background.pushImage(0, -139, minerClockWidth, minerClockHeight, globalHashScreen);
+  //background.fillSprite(TFT_CYAN);
+  // Print Global Hashrate
+  render.setFontSize(17);
+  render.rdrawString(data.globalHashRate.c_str(), 274, 145-139, TFT_BLACK);
 
-    hasChangedScreen = false;
-  }
+  // Draw percentage rectangle
+  int x2 = 2 + (138 * data.progressPercent / 100);
+  background.fillRect(2, 149-139, x2, 168, 0xDEDB);
 
-  drawCleanTechHeader("GLOBAL STATS", data.currentHashRate, data.currentTime);
+  // Print Remaining BLocks
+  background.setTextFont(FONT2);
+  background.setTextSize(1); 
+  background.setTextDatum(MC_DATUM);
+  background.setTextColor(TFT_BLACK);
+  background.drawString(data.remainingBlocks.c_str(), 72, 159-139, FONT2);
 
-  // Big Global Hash
-  tft.fillRect(14, 48, 290, 48, CT_CARD_BG);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  tft.drawString((data.globalHashRate + " EH/s").c_str(), 18, 50, 6);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString(("Mempool: " + data.halfHourFee).c_str(), 18, 98, 2);
+  // Push prepared background to screen
+  background.pushSprite(0, 139);
+  // Delete sprite to free the memory heap
+  background.deleteSprite();   
 
-  // Network Diff Card
-  tft.fillRect(14, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_ORANGE, CT_CARD_BG);
-  tft.drawString(data.netwrokDifficulty.c_str(), 18, 146, 4);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString(("Block: #" + data.blockHeight).c_str(), 18, 180, 2);
+ // Create background sprite to print data at once
+  createBackgroundSprite(140,40);
+  // Print background screen
+  background.pushImage(-5, -100, minerClockWidth, minerClockHeight, globalHashScreen);
+  //background.fillSprite(TFT_CYAN);
+  // Print BlockHeight
+  render.setFontSize(28);
+  render.rdrawString(data.blockHeight.c_str(), 140-5, 104-100, 0xDEDB);
 
-  // Right Card (Halving progress)
-  tft.fillRect(171, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_TEAL, CT_CARD_BG);
-  tft.drawString(data.remainingBlocks.c_str(), 171, 146, 2);
-  tft.fillRoundRect(171, 172, 130, 8, 3, CT_CARD_BORDER);
-  int pw = (130 * data.progressPercent) / 100;
-  if (pw > 130) pw = 130;
-  tft.fillRoundRect(171, 172, pw, 8, 3, CT_TEAL);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString((String(data.progressPercent) + "% completed").c_str(), 171, 192, 2);
+  // Push prepared background to screen
+  background.pushSprite(5, 100);
+  // Delete sprite to free the memory heap
+  background.deleteSprite();   
+
+  Serial.printf(">>> Completed %s share(s), %s Khashes, avg. hashrate %s KH/s\n",
+                data.completedShares.c_str(), data.totalKHashes.c_str(), data.currentHashRate.c_str());
+
+  #ifdef DEBUG_MEMORY
+  // Print heap
+  printheap();
+  #endif
 }
-
 void esp32_2432S028R_BTCprice(unsigned long mElapsed)
 {
+  
+  if (hasChangedScreen) tft.pushImage(0, 0, priceScreenWidth, priceScreenHeight, priceScreen);
+  printPoolData();
+  hasChangedScreen = false;
+
   clock_data data = getClockData(mElapsed);
 
-  if (hasChangedScreen) {
-    tft.fillScreen(CT_BG);
-    drawCleanTechHeader("MARKET & PRICE", data.currentHashRate, data.currentTime);
-    drawCleanTechFooter(4, 4);
+ // Create background sprite to print data at once
+  createBackgroundSprite(270,36);
 
-    // Hero Card Frame (BTC Price)
-    tft.fillRoundRect(6, 28, 308, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 28, 308, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 34, 3, 10, CT_ORANGE);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("BITCOIN SPOT PRICE (USD)", 22, 32, 2);
+  // Print background screen
+  background.pushImage(0, -130, priceScreenWidth, priceScreenHeight, priceScreen);
+  // Hashrate
+  render.setFontSize(25);
+  render.setFontColor(TFT_BLACK);
+  render.rdrawString(data.currentHashRate.c_str(), 95, 0, TFT_BLACK);
 
-    // Left Card Frame
-    tft.fillRoundRect(6, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(6, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(14, 130, 3, 10, CT_CYAN);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("BLOCK HEIGHT", 22, 128, 2);
+  // Print BlockHeight
+  render.setFontSize(18);
+  render.rdrawString(data.blockHeight.c_str(), 254, 9, TFT_WHITE);
 
-    // Right Card Frame
-    tft.fillRoundRect(163, 124, 151, 92, 6, CT_CARD_BG);
-    tft.drawRoundRect(163, 124, 151, 92, 6, CT_CARD_BORDER);
-    tft.fillRect(171, 130, 3, 10, CT_GREEN);
-    tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-    tft.drawString("MINER HASHRATE", 179, 128, 2);
+  // Push prepared background to screen
+  background.pushSprite(0, 130);
+  // Delete sprite to free the memory heap
+  background.deleteSprite(); 
 
-    hasChangedScreen = false;
-  }
+  createBackgroundSprite(180,105);
+  // Print background screen
+  background.pushImage(-130, -3, priceScreenWidth, priceScreenHeight, priceScreen);
+  
+  // Print Hour
+  background.setFreeFont(FSSB9);
+  background.setTextSize(1);
+  background.setTextDatum(TL_DATUM);
+  background.setTextColor(TFT_BLACK);
+  background.drawString(data.currentTime.c_str(), 202-130, 0, GFXFF);
+ 
+  // Print BTC Price
+  background.setFreeFont(FF24);
+  background.setTextDatum(TL_DATUM);
+  background.setTextSize(1);
+  background.setTextColor(0xDEDB, TFT_BLACK);
+  background.drawString(data.btcPrice.c_str(), 0, 50, GFXFF);
+ 
+  // Push prepared background to screen
+  background.pushSprite(130, 3);
 
-  drawCleanTechHeader("MARKET & PRICE", data.currentHashRate, data.currentTime);
+  // Delete sprite to free the memory heap
+  background.deleteSprite();   
 
-  // Huge Price
-  tft.fillRect(14, 48, 290, 48, CT_CARD_BG);
-  tft.setTextColor(CT_ORANGE, CT_CARD_BG);
-  tft.drawString(("$" + data.btcPrice).c_str(), 18, 50, 6);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString(data.currentDate.c_str(), 18, 98, 2);
+  Serial.printf(">>> Completed %s share(s), %s Khashes, avg. hashrate %s KH/s\n",
+                data.completedShares.c_str(), data.totalKHashes.c_str(), data.currentHashRate.c_str());
 
-  // Left Card (Block)
-  tft.fillRect(14, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  tft.drawString(("#" + data.blockHeight).c_str(), 18, 152, 4);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString("Bitcoin Mainnet", 18, 186, 2);
-
-  // Right Card (Hashrate)
-  tft.fillRect(171, 146, 135, 66, CT_CARD_BG);
-  tft.setTextColor(CT_GREEN, CT_CARD_BG);
-  tft.drawString(data.currentHashRate.c_str(), 171, 146, 4);
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString("KH/s", 270, 154, 2);
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString((data.completedShares + " shares").c_str(), 171, 186, 2);
+  #ifdef DEBUG_MEMORY
+  // Print heap
+  printheap();
+  #endif
 }
 
 void esp32_2432S028R_LoadingScreen(void)
 {
-  tft.fillScreen(CT_BG);
-  // Outer decorative card
-  tft.fillRoundRect(20, 20, 280, 200, 10, CT_CARD_BG);
-  tft.drawRoundRect(20, 20, 280, 200, 10, CT_CARD_BORDER);
-
-  // Bitcoin Gold/Orange emblem
-  tft.fillCircle(160, 68, 26, CT_ORANGE);
-  tft.drawCircle(160, 68, 29, CT_CYAN);
-  tft.setTextColor(TFT_WHITE, CT_ORANGE);
-  tft.drawCentreString("B", 160, 52, 4);
-
-  // Brand and edition titles
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawCentreString("NERDMINER", 160, 106, 4);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  tft.drawCentreString("CLEANTECH EDITION", 160, 136, 2);
-
-  tft.setTextColor(CT_TEAL, CT_CARD_BG);
-  tft.drawCentreString("Xtensa LX6 - Pipelined SHA-256", 160, 158, 2);
-
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawCentreString(CURRENT_VERSION, 160, 184, 2);
+  tft.fillScreen(TFT_BLACK);
+  tft.pushImage(0, 33, initWidth, initHeight, initScreen);
+  tft.setTextColor(TFT_BLACK);
+  tft.drawString(CURRENT_VERSION, 24, 147, FONT2);
+  // delay(2000);
+  // tft.fillScreen(TFT_BLACK);
+  // tft.pushImage(0, 0, initWidth, initHeight, MinerScreen);
 }
 
 void esp32_2432S028R_SetupScreen(void)
 {
-  tft.fillScreen(CT_BG);
-  tft.fillRoundRect(15, 15, 290, 210, 8, CT_CARD_BG);
-  tft.drawRoundRect(15, 15, 290, 210, 8, CT_CARD_BORDER);
-
-  tft.fillRect(30, 28, 4, 14, CT_CYAN);
-  tft.setTextColor(CT_CYAN, CT_CARD_BG);
-  tft.drawString("WIFI SETUP MODE", 40, 26, 4);
-
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString("1. Connect to Wi-Fi AP:", 30, 65, 2);
-  tft.setTextColor(CT_ORANGE, CT_CARD_BG);
-  tft.drawString("SSID: NerdMinerAP", 50, 85, 2);
-
-  tft.setTextColor(CT_TEXT_LIGHT, CT_CARD_BG);
-  tft.drawString("2. Open browser at:", 30, 115, 2);
-  tft.setTextColor(CT_TEAL, CT_CARD_BG);
-  tft.drawString("http://192.168.4.1", 50, 135, 2);
-
-  tft.setTextColor(CT_TEXT_MUTED, CT_CARD_BG);
-  tft.drawString("3. Configure your Wi-Fi & BTC wallet", 30, 165, 2);
-  tft.setTextColor(CT_TEXT_DARK, CT_CARD_BG);
-  tft.drawCentreString("Tap anywhere to reboot when ready", 160, 195, 2);
+  tft.fillScreen(TFT_BLACK);
+  tft.pushImage(0, 33, setupModeWidth, setupModeHeight, setupModeScreen);
 }
 
 void esp32_2432S028R_AnimateCurrentScreen(unsigned long frame)
