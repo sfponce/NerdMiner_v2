@@ -406,32 +406,19 @@ coin_data getCoinData(unsigned long mElapsed)
 }
 
 String getPoolAPIUrl(void) {
-    poolAPIUrl = String(getPublicPool);
-    if (Settings.PoolAddress == "public-pool.io") {
+    if (Settings.PoolAddress.indexOf("nerdminers.org") >= 0) {
+        poolAPIUrl = "https://pool.nerdminers.org/users/";
+    } else if (Settings.PoolAddress == "public-pool.io") {
         poolAPIUrl = "https://public-pool.io:40557/api/client/";
-    } 
-    else {
-        if (Settings.PoolAddress == "pool.nerdminers.org") {
-            poolAPIUrl = "https://pool.nerdminers.org/users/";
-        }
-        else {
-            switch (Settings.PoolPort) {
-                case 3333:
-                    if (Settings.PoolAddress == "pool.sethforprivacy.com")
-                        poolAPIUrl = "https://pool.sethforprivacy.com/api/client/";
-                    if (Settings.PoolAddress == "pool.solomining.de")
-                        poolAPIUrl = "https://pool.solomining.de/api/client/";
-                    // Add more cases for other addresses with port 3333 if needed
-                    break;
-                case 2018:
-                    // Local instance of public-pool.io on Umbrel or Start9
-                    poolAPIUrl = "http://" + Settings.PoolAddress + ":2019/api/client/";
-                    break;
-                default:
-                    poolAPIUrl = String(getPublicPool);
-                    break;
-            }
-        }
+    } else if (Settings.PoolAddress == "pool.sethforprivacy.com") {
+        poolAPIUrl = "https://pool.sethforprivacy.com/api/client/";
+    } else if (Settings.PoolAddress == "pool.solomining.de") {
+        poolAPIUrl = "https://pool.solomining.de/api/client/";
+    } else if (Settings.PoolPort == 2018) {
+        poolAPIUrl = "http://" + Settings.PoolAddress + ":2019/api/client/";
+    } else {
+        // Dynamic fallback: use user configured pool hostname with standard public-pool API port
+        poolAPIUrl = "https://" + Settings.PoolAddress + ":40557/api/client/";
     }
     return poolAPIUrl;
 }
@@ -447,12 +434,9 @@ pool_data getPoolData(void){
           String btcWallet = Settings.BtcWallet;
           // Serial.println(btcWallet);
           if (btcWallet.indexOf(".")>0) btcWallet = btcWallet.substring(0,btcWallet.indexOf("."));
-#ifdef SCREEN_WORKERS_ENABLE
-          Serial.println("Pool API : " + poolAPIUrl+btcWallet);
-          http.begin(poolAPIUrl+btcWallet);
-#else
-          http.begin(String(getPublicPool)+btcWallet);
-#endif
+          String requestUrl = getPoolAPIUrl() + btcWallet;
+          Serial.println("Pool API : " + requestUrl);
+          http.begin(requestUrl);
           int httpCode = http.GET();
           if (httpCode == HTTP_CODE_OK) {
               String payload = http.getString();
