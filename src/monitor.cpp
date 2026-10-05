@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include "mbedtls/md.h"
 #include "HTTPClient.h"
 #include <NTPClient.h>
@@ -428,6 +429,8 @@ pool_data getPoolData(void){
     if((mPoolUpdate == 0) || (millis() - mPoolUpdate > UPDATE_POOL_min * 60 * 1000)){      
         if (WiFi.status() != WL_CONNECTED) return pData;            
         //Make first API call to get global hash and current difficulty
+        WiFiClientSecure client;
+        client.setInsecure();
         HTTPClient http;
         http.setTimeout(10000);        
         try {          
@@ -436,7 +439,7 @@ pool_data getPoolData(void){
           if (btcWallet.indexOf(".")>0) btcWallet = btcWallet.substring(0,btcWallet.indexOf("."));
           String requestUrl = getPoolAPIUrl() + btcWallet;
           Serial.println("Pool API : " + requestUrl);
-          http.begin(requestUrl);
+          http.begin(client, requestUrl);
           int httpCode = http.GET();
           if (httpCode == HTTP_CODE_OK) {
               String payload = http.getString();
@@ -474,12 +477,9 @@ pool_data getPoolData(void){
               Serial.println("\n####### Pool Data OK!");               
           } else {
               Serial.println("\n####### Pool Data HTTP Error!");    
-              /* Serial.println(httpCode);
-              String payload = http.getString();
-              Serial.println(payload); */
-              // mPoolUpdate = millis();
-              pData.bestDifficulty = "P";
-              pData.workersHash = "E";
+              mPoolUpdate = millis();
+              pData.bestDifficulty = "0";
+              pData.workersHash = "0 H";
               pData.workersCount = 0;
               http.end();
               return pData; 
@@ -487,9 +487,9 @@ pool_data getPoolData(void){
           http.end();
         } catch(...) {
           Serial.println("####### Pool Error!");          
-          // mPoolUpdate = millis();
-          pData.bestDifficulty = "P";
-          pData.workersHash = "Error";
+          mPoolUpdate = millis();
+          pData.bestDifficulty = "0";
+          pData.workersHash = "0 H";
           pData.workersCount = 0;
           http.end();
           return pData;
