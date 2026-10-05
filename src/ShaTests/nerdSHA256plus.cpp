@@ -24,10 +24,10 @@
 #include <math.h>
 #include <string.h>
 
-//#pragma GCC optimize ("Ofast")
-//#pragma GCC optimize ("jump-tables")
-//#pragma GCC optimize ("tree-switch-conversion")
-//#pragma GCC optimize ("no-stack-check")
+#pragma GCC optimize ("Ofast")
+#pragma GCC optimize ("jump-tables")
+#pragma GCC optimize ("tree-switch-conversion")
+#pragma GCC optimize ("no-stack-check")
 
 #define ROTR(x, n) ((x >> n) | (x << ((sizeof(x) << 3) - n)))
 
@@ -93,9 +93,8 @@ uint32_t rotlFixed(uint32_t x, uint32_t y)
         return (x << y) | (x >> (sizeof(y) * 8 - y));
     }
 
-uint32_t ByteReverseWord32(uint32_t value){
-    value = ((value & 0xFF00FF00) >> 8) | ((value & 0x00FF00FF) << 8);
-    return rotlFixed(value, 16U);
+inline uint32_t ByteReverseWord32(uint32_t value){
+    return __builtin_bswap32(value);
 }
 
 void ByteReverseWords(uint32_t* out, const uint32_t* in, uint32_t byteCount)

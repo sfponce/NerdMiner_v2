@@ -18,10 +18,11 @@
 #include <map>
 #include "mbedtls/sha256.h"
 #include "i2c_master.h"
+#include "sha256_pipelined.h"
 
 //10 Jobs per second
 #define NONCE_PER_JOB_SW 4096
-#define NONCE_PER_JOB_HW 16*1024
+#define NONCE_PER_JOB_HW 64*1024
 
 //#define I2C_SLAVE
 
@@ -1032,12 +1033,14 @@ static inline void nerd_sha_ll_fill_text_block_sha256_double()
 void minerWorkerHw(void * task_id)
 {
   unsigned int miner_id = (uint32_t)task_id;
-  Serial.printf("[MINER] %d Started minerWorkerHwEsp32D Task!\n", miner_id);
+  Serial.printf("[MINER] %d Started Pipelined minerWorkerHw Task!\n", miner_id);
+  sha256_pipelined_init();
 
   std::shared_ptr<JobRequest> job;
   std::shared_ptr<JobResult> result;
   uint8_t hash[32];
-  uint8_t sha_buffer[128];
+  uint32_t sha_buffer[20];
+  volatile uint32_t *sha_base = (volatile uint32_t *)0x3FF03000;
 
   while (1)
   {
@@ -1066,56 +1069,62 @@ void minerWorkerHw(void * task_id)
       uint8_t job_in_work = job->id & 0xFF;
       memcpy(sha_buffer, job->sha_buffer, 80);
 
-      esp_sha_lock_engine(SHA2_256);
-      for (uint32_t n = 0; n < job->nonce_count; ++n)
+      uint32_t current_nonce_swapped = __builtin_bswap32(job->nonce_start);
+      uint32_t nonce_end_swapped = current_nonce_swapped + job->nonce_count;
+      uint32_t batch_hashes = 0;
+
+      while (current_nonce_swapped < nonce_end_swapped && s_working_current_job_id == job_in_work)
       {
-        //((uint32_t*)(sha_buffer+64+12))[0] = __builtin_bswap32(job->nonce_start+n);
+        bool candidate = sha256_pipelined_mine(
+            sha_base,
+            sha_buffer,
+            &current_nonce_swapped,
+            nonce_end_swapped,
+            &batch_hashes,
+            &s_working_current_job_id,
+            job_in_work
+        );
 
-        //sha_hal_hash_block(SHA2_256, s_test_buffer, 64/4, true);
-        //nerd_sha_hal_wait_idle();
-        nerd_sha_ll_fill_text_block_sha256(sha_buffer);
-        sha_ll_start_block(SHA2_256);
-
-        //sha_hal_hash_block(SHA2_256, s_test_buffer+64, 64/4, false);
-        nerd_sha_hal_wait_idle();
-        nerd_sha_ll_fill_text_block_sha256_upper(sha_buffer+64, job->nonce_start+n);
-        sha_ll_continue_block(SHA2_256);
-
-        nerd_sha_hal_wait_idle();
-        sha_ll_load(SHA2_256);
-
-        //sha_hal_hash_block(SHA2_256, interResult, 64/4, true);
-        nerd_sha_hal_wait_idle();
-        nerd_sha_ll_fill_text_block_sha256_double();
-        sha_ll_start_block(SHA2_256);
-
-        nerd_sha_hal_wait_idle();
-        sha_ll_load(SHA2_256);
-        if (nerd_sha_ll_read_digest_swap_if(hash))
+        if (candidate)
         {
-          //~5 per second
-          double diff_hash = diff_from_target(hash);
-          if (diff_hash > result->difficulty)
+          uint32_t cand_nonce_swapped = current_nonce_swapped - 1;
+          uint32_t cand_nonce_native = __builtin_bswap32(cand_nonce_swapped);
+
+          ((uint32_t*)(job->sha_buffer + 64 + 12))[0] = cand_nonce_native;
+          if (nerd_sha256d_baked(job->midstate, job->sha_buffer + 64, job->bake, hash))
           {
-            if (isSha256Valid(hash))
+            double diff_hash = diff_from_target(hash);
+            if (diff_hash > job->difficulty && isSha256Valid(hash))
             {
               result->difficulty = diff_hash;
-              result->nonce = job->nonce_start+n;
+              result->nonce = cand_nonce_native;
               memcpy(result->hash, hash, sizeof(hash));
+              result->nonce_count = batch_hashes;
+              {
+                std::lock_guard<std::mutex> lock(s_job_mutex);
+                if (s_job_result_list.size() < 16)
+                  s_job_result_list.push_back(result);
+              }
+              result = std::make_shared<JobResult>();
+              result->id = job->id;
+              result->nonce = 0xFFFFFFFF;
+              result->difficulty = job->difficulty;
+              batch_hashes = 0;
             }
           }
         }
-        if (
-             (uint8_t)(n & 0xFF) == 0 &&
-             s_working_current_job_id != job_in_work)
+
+        if (s_working_current_job_id != job_in_work)
         {
-          result->nonce_count = n+1;
           break;
         }
       }
-      esp_sha_unlock_engine(SHA2_256);
+
+      result->nonce_count = batch_hashes;
     } else
+    {
       vTaskDelay(2 / portTICK_PERIOD_MS);
+    }
 
     esp_task_wdt_reset();
   }
