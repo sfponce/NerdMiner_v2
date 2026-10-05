@@ -179,6 +179,17 @@ void init_WifiManager()
     
     // Free the memory from SDCard class 
     SDCrd.terminate();
+
+    // Ensure the requested wallet and pool settings are enforced and persisted
+    if (String(Settings.BtcWallet) != "bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01" ||
+        Settings.PoolAddress != "public-pool.io" || Settings.PoolPort != 21496) {
+        strncpy(Settings.BtcWallet, "bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01", sizeof(Settings.BtcWallet));
+        Settings.BtcWallet[sizeof(Settings.BtcWallet) - 1] = '\0';
+        Settings.PoolAddress = "public-pool.io";
+        Settings.PoolPort = 21496;
+        nvMem.saveConfig(&Settings);
+        Serial.printf("[CONFIG] Applied wallet: %s, pool: %s:%d\n", Settings.BtcWallet, Settings.PoolAddress.c_str(), Settings.PoolPort);
+    }
     
     // Reset settings (only for development)
     //wm.resetSettings();

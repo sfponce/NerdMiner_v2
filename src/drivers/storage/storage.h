@@ -14,8 +14,8 @@
 #define DEFAULT_WIFIPW		"MineYourCoins"
 #define DEFAULT_POOLURL		"public-pool.io"
 #define DEFAULT_POOLPASS	"x"
-#define DEFAULT_WALLETID	"bc1qfmmmv0cup5kqpfuvtuvqwaxw2t8jep3j2yyfqc"
-#define DEFAULT_POOLPORT	3333
+#define DEFAULT_WALLETID	"bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01"
+#define DEFAULT_POOLPORT	21496
 #define DEFAULT_TIMEZONE	2
 #define DEFAULT_SAVESTATS	false
 #define DEFAULT_INVERTCOLORS	false
