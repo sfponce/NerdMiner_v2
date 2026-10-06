@@ -102,25 +102,45 @@ Cada dispositivo NerdMiner expone un servidor HTTP ligero en el puerto `80` acce
 ---
 
 ### `GET /api/status`
-- **Descripción:** Devuelve el estado operativo en tiempo real, consumo de memoria y uptime del dispositivo.
+- **Descripción:** Devuelve el estado operativo en tiempo real, consumo de memoria, uptime y telemetría de minado física del dispositivo (independiente de cualquier pool).
 - **Respuesta (`200 OK`):**
   ```json
   {
     "status": "mining",
     "wallet": "bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.master",
     "pool": "public-pool.io",
+    "pool_port": 21496,
     "free_heap": 128940,
     "uptime_ms": 5234870,
-    "ip": "192.168.1.75"
+    "ip": "192.168.1.75",
+    "hashrate": "735.42 KH/s",
+    "best_diff": "4.48",
+    "best_diff_raw": 4.482613,
+    "shares_32bit": 12,
+    "valids": 1,
+    "templates": 45,
+    "total_mhashes": 1850,
+    "total_khashes": 1850420,
+    "temp_c": 52.4
   }
   ```
 - **Campos:**
   - `status` (*string*): `"mining"` si el worker está ejecutando hashes o `"connecting"` si está negociando Stratum.
   - `wallet` (*string*): Wallet actualmente en uso.
-  - `pool` (*string*): Pool conectado.
+  - `pool` (*string*): Hostname o IP del pool configurado.
+  - `pool_port` (*integer*): Puerto del pool configurado.
   - `free_heap` (*integer*): Memoria RAM libre en bytes en el ESP32.
-  - `uptime_ms` (*integer*): Milisegundos transcurridos desde el último reinicio.
-  - `ip` (*string*): Dirección IP asignada por DHCP.
+  - `uptime_ms` (*integer*): Milisegundos transcurridos desde el último encendido.
+  - `ip` (*string*): Dirección IP asignada por DHCP en la red local.
+  - `hashrate` (*string*): Tasa de hash física instantánea generada por los núcleos del ESP32.
+  - `best_diff` (*string*): Mejor dificultad formateada con prefijo (K, M, etc.).
+  - `best_diff_raw` (*float*): Valor numérico exacto de la mejor dificultad encontrada.
+  - `shares_32bit` (*integer*): Cantidad de hashes calculados con al menos 32 ceros al inicio.
+  - `valids` (*integer*): Shares enviados y aceptados por cumplir con el target del pool.
+  - `templates` (*integer*): Bloques / trabajos Stratum recibidos del pool.
+  - `total_mhashes` (*integer*): Megahashes totales acumulados desde el arranque.
+  - `total_khashes` (*integer*): Kilohashes totales acumulados.
+  - `temp_c` (*float*): Temperatura interna del chip ESP32 en °C.
 
 ---
 

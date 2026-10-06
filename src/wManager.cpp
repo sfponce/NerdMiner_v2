@@ -15,6 +15,7 @@
 #include "drivers/storage/nvMemory.h"
 #include "drivers/storage/storage.h"
 #include "mining.h"
+#include "utils.h"
 #include "timeconst.h"
 
 #include <ArduinoJson.h>
@@ -561,13 +562,35 @@ static void setupApiServer() {
 
     // GET /api/status - Retrieve live miner status & statistics
     apiServer.on("/api/status", HTTP_GET, []() {
-        StaticJsonDocument<512> doc;
+        extern volatile uint32_t shares;
+        extern volatile uint32_t valids;
+        extern uint32_t templates;
+        extern uint32_t Mhashes;
+        extern uint32_t totalKHashes;
+        extern double best_diff;
+
+        StaticJsonDocument<768> doc;
         doc["status"] = (mMonitor.NerdStatus == NM_hashing) ? "mining" : "connecting";
         doc["wallet"] = Settings.BtcWallet;
         doc["pool"] = Settings.PoolAddress;
+        doc["pool_port"] = Settings.PoolPort;
         doc["free_heap"] = ESP.getFreeHeap();
         doc["uptime_ms"] = millis();
         doc["ip"] = WiFi.localIP().toString();
+
+        // Live mining telemetry direct from device
+        char bestDiffBuf[32];
+        suffix_string(best_diff, bestDiffBuf, sizeof(bestDiffBuf), 0);
+        doc["best_diff"] = String(bestDiffBuf);
+        doc["best_diff_raw"] = best_diff;
+        doc["shares_32bit"] = shares;
+        doc["valids"] = valids;
+        doc["templates"] = templates;
+        doc["total_mhashes"] = Mhashes;
+        doc["total_khashes"] = totalKHashes;
+        #if SOC_TEMP_SENSOR_SUPPORTED
+        doc["temp_c"] = temperatureRead();
+        #endif
 
         String response;
         serializeJson(doc, response);
