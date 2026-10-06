@@ -71,6 +71,8 @@ Cada dispositivo NerdMiner expone un servidor HTTP ligero en el puerto `80` acce
 - **Payload JSON de ejemplo:**
   ```json
   {
+    "wifi_ssid": "MiNuevaRedWiFi",
+    "wifi_password": "clave_segura_aqui",
     "wallet": "bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01",
     "pool_url": "public-pool.io",
     "pool_port": 21496,
@@ -85,6 +87,36 @@ Cada dispositivo NerdMiner expone un servidor HTTP ligero en el puerto `80` acce
   curl -X POST http://192.168.1.75/api/config \
        -H "Content-Type: application/json" \
        -d '{"wallet":"bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01"}'
+  ```
+
+---
+
+### `POST /api/wifi`
+- **Descripción:** Endpoint específico y directo para **cambiar la red WiFi** del minero de forma remota. Guarda el nuevo SSID y contraseña en flash y reinicia de inmediato conectándose a la nueva red sin perder la wallet ni el pool.
+- **Payload JSON:**
+  ```json
+  {
+    "ssid": "NombreDeTuWiFi",
+    "password": "PasswordWiFi"
+  }
+  ```
+- **Ejemplo con cURL (JSON):**
+  ```bash
+  curl -X POST http://192.168.1.75/api/wifi \
+       -H "Content-Type: application/json" \
+       -d '{"ssid":"MiNuevaRed","password":"MiPassword123"}'
+  ```
+- **Ejemplo con cURL (Form urlencoded):**
+  ```bash
+  curl -X POST http://192.168.1.75/api/wifi \
+       -d "ssid=MiNuevaRed&password=MiPassword123"
+  ```
+- **Respuesta (`200 OK`):**
+  ```json
+  {
+    "status": "ok",
+    "message": "WiFi credentials saved to flash. Reconnecting to new network..."
+  }
   ```
 - **Ejemplo con cURL (Form urlencoded):**
   ```bash

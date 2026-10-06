@@ -29,6 +29,10 @@ bool nvMemory::saveConfig(TSettings* Settings)
 
         // Create a JSON document
         StaticJsonDocument<512> json;
+        if (Settings->WifiSSID.length() > 0 && Settings->WifiSSID != DEFAULT_SSID) {
+            json[JSON_SPIFFS_KEY_SSID] = Settings->WifiSSID;
+            json[JSON_SPIFFS_KEY_PASW] = Settings->WifiPW;
+        }
         json[JSON_SPIFFS_KEY_POOLURL] = Settings->PoolAddress;
         json[JSON_SPIFFS_KEY_POOLPORT] = Settings->PoolPort;
         json[JSON_SPIFFS_KEY_POOLPASS] = Settings->PoolPassword;
@@ -90,6 +94,10 @@ bool nvMemory::loadConfig(TSettings* Settings)
                 Serial.print('\n');
                 if (!error)
                 {
+                    if (json.containsKey(JSON_SPIFFS_KEY_SSID))
+                        Settings->WifiSSID = json[JSON_SPIFFS_KEY_SSID].as<String>();
+                    if (json.containsKey(JSON_SPIFFS_KEY_PASW))
+                        Settings->WifiPW = json[JSON_SPIFFS_KEY_PASW].as<String>();
                     Settings->PoolAddress = json[JSON_SPIFFS_KEY_POOLURL] | Settings->PoolAddress;
                     strcpy(Settings->PoolPassword, json[JSON_SPIFFS_KEY_POOLPASS] | Settings->PoolPassword);
                     strcpy(Settings->BtcWallet, json[JSON_SPIFFS_KEY_WALLETID] | Settings->BtcWallet);

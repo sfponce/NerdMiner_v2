@@ -37,6 +37,8 @@
 #define JSON_KEY_BRIGHTNESS	"Brightness"
 
 // JSON config file SPIFFS (different for backward compatibility with existing devices)
+#define JSON_SPIFFS_KEY_SSID		"ssid"
+#define JSON_SPIFFS_KEY_PASW		"wifiPassword"
 #define JSON_SPIFFS_KEY_POOLURL		"poolString"
 #define JSON_SPIFFS_KEY_POOLPORT	"portNumber"
 #define JSON_SPIFFS_KEY_POOLPASS	"poolPassword"

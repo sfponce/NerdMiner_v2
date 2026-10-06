@@ -181,15 +181,13 @@ void init_WifiManager()
     // Free the memory from SDCard class 
     SDCrd.terminate();
 
-    // Ensure the requested wallet and pool settings are enforced and persisted
-    if (String(Settings.BtcWallet) != "bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01" ||
-        Settings.PoolAddress != "public-pool.io" || Settings.PoolPort != 21496) {
-        strncpy(Settings.BtcWallet, "bc1pw28ulnema2vv3p9wr6tsxk27lk3upk6kz8xdy2zthc5e5e33meas9ml3uh.worker01", sizeof(Settings.BtcWallet));
+    // If no wallet is configured yet, set default
+    if (strlen(Settings.BtcWallet) == 0) {
+        strncpy(Settings.BtcWallet, DEFAULT_WALLETID, sizeof(Settings.BtcWallet) - 1);
         Settings.BtcWallet[sizeof(Settings.BtcWallet) - 1] = '\0';
-        Settings.PoolAddress = "public-pool.io";
-        Settings.PoolPort = 21496;
+        Settings.PoolAddress = DEFAULT_POOLURL;
+        Settings.PoolPort = DEFAULT_POOLPORT;
         nvMem.saveConfig(&Settings);
-        Serial.printf("[CONFIG] Applied wallet: %s, pool: %s:%d\n", Settings.BtcWallet, Settings.PoolAddress.c_str(), Settings.PoolPort);
     }
     
     // Reset settings (only for development)
@@ -314,8 +312,27 @@ void init_WifiManager()
         wm.setCaptivePortalEnable(true); 
         wm.setConfigPortalBlocking(true);
         wm.setEnableConfigPortal(true);
-        // if (!wm.autoConnect(Settings.WifiSSID.c_str(), Settings.WifiPW.c_str()))
-        if (!wm.autoConnect(apName, DEFAULT_WIFIPW))
+        
+        bool connected = false;
+        if (Settings.WifiSSID.length() > 0 && Settings.WifiSSID != DEFAULT_SSID) {
+            Serial.printf("Connecting to configured WiFi SSID: %s\n", Settings.WifiSSID.c_str());
+            connected = wm.autoConnect(apName, DEFAULT_WIFIPW);
+            if (!connected && WiFi.status() != WL_CONNECTED) {
+                // Try direct WiFi connection with configured credentials
+                WiFi.begin(Settings.WifiSSID.c_str(), Settings.WifiPW.c_str());
+                int attempts = 0;
+                while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+                    delay(500);
+                    Serial.print(".");
+                    attempts++;
+                }
+                connected = (WiFi.status() == WL_CONNECTED);
+            }
+        } else {
+            connected = wm.autoConnect(apName, DEFAULT_WIFIPW);
+        }
+
+        if (!connected && WiFi.status() != WL_CONNECTED)
         {
             Serial.println("Failed to connect to configured WIFI, and hit timeout");
             if (shouldSaveConfig) {
@@ -456,6 +473,7 @@ static void setupApiServer() {
         doc["pool_password"] = Settings.PoolPassword;
         doc["timezone"] = Settings.Timezone;
         doc["save_stats"] = Settings.saveStats;
+        doc["wifi_ssid"] = (Settings.WifiSSID.length() > 0 && Settings.WifiSSID != DEFAULT_SSID) ? Settings.WifiSSID : WiFi.SSID();
         #if defined(ESP32_2432S028R) || defined(ESP32_2432S028_2USB)
         doc["invert_colors"] = Settings.invertColors;
         doc["brightness"] = Settings.Brightness;
@@ -471,6 +489,14 @@ static void setupApiServer() {
         if (!apiServer.hasArg("plain")) {
             // Also accept URL-encoded form parameters
             bool modified = false;
+            if (apiServer.hasArg("wifi_ssid")) {
+                Settings.WifiSSID = apiServer.arg("wifi_ssid");
+                modified = true;
+            }
+            if (apiServer.hasArg("wifi_password")) {
+                Settings.WifiPW = apiServer.arg("wifi_password");
+                modified = true;
+            }
             if (apiServer.hasArg("wallet")) {
                 strncpy(Settings.BtcWallet, apiServer.arg("wallet").c_str(), sizeof(Settings.BtcWallet));
                 Settings.BtcWallet[sizeof(Settings.BtcWallet) - 1] = '\0';
@@ -519,6 +545,12 @@ static void setupApiServer() {
             return;
         }
 
+        if (doc.containsKey("wifi_ssid")) {
+            Settings.WifiSSID = doc["wifi_ssid"].as<String>();
+        }
+        if (doc.containsKey("wifi_password")) {
+            Settings.WifiPW = doc["wifi_password"].as<String>();
+        }
         if (doc.containsKey("wallet")) {
             strncpy(Settings.BtcWallet, doc["wallet"].as<const char*>(), sizeof(Settings.BtcWallet));
             Settings.BtcWallet[sizeof(Settings.BtcWallet) - 1] = '\0';
@@ -558,6 +590,37 @@ static void setupApiServer() {
         } else {
             apiServer.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Configuration saved to flash.\"}");
         }
+    });
+
+    // POST /api/wifi - Dedicated endpoint to update WiFi credentials and switch network immediately
+    apiServer.on("/api/wifi", HTTP_POST, []() {
+        String ssid = "";
+        String password = "";
+
+        if (apiServer.hasArg("plain")) {
+            StaticJsonDocument<256> doc;
+            DeserializationError err = deserializeJson(doc, apiServer.arg("plain"));
+            if (!err) {
+                if (doc.containsKey("ssid")) ssid = doc["ssid"].as<String>();
+                if (doc.containsKey("password")) password = doc["password"].as<String>();
+            }
+        } else {
+            if (apiServer.hasArg("ssid")) ssid = apiServer.arg("ssid");
+            if (apiServer.hasArg("password")) password = apiServer.arg("password");
+        }
+
+        if (ssid.length() == 0) {
+            apiServer.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing 'ssid' parameter\"}");
+            return;
+        }
+
+        Settings.WifiSSID = ssid;
+        Settings.WifiPW = password;
+        nvMem.saveConfig(&Settings);
+
+        apiServer.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"WiFi credentials saved to flash. Reconnecting to new network...\"}");
+        delay(800);
+        ESP.restart();
     });
 
     // GET /api/status - Retrieve live miner status & statistics
