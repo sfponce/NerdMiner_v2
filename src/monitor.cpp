@@ -31,7 +31,7 @@ extern TSettings Settings;
 bool invertColors = false;
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 60000);
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000);
 unsigned int bitcoin_price=0;
 String current_block = "793261";
 global_data gData;
@@ -210,13 +210,18 @@ void getTime(unsigned long* currentHours, unsigned long* currentMinutes, unsigne
   //Check if need an NTP call to check current time
   if((mTriggerUpdate == 0) || (millis() - mTriggerUpdate > UPDATE_PERIOD_h * 60 * 60 * 1000)){ //60 sec. * 60 min * 1000ms
     if(WiFi.status() == WL_CONNECTED) {
-        if(timeClient.update()) mTriggerUpdate = millis(); //NTP call to get current time
-        initialTime = timeClient.getEpochTime(); // Guarda la hora inicial (en segundos desde 1970)
-        Serial.print("TimeClient NTPupdateTime ");
+        if(timeClient.update() || timeClient.isTimeSet()) {
+            mTriggerUpdate = millis(); //NTP call to get current time
+            initialTime = timeClient.getEpochTime(); // Guarda la hora inicial (en segundos desde 1970)
+            Serial.printf("TimeClient NTPupdateTime OK: %lu\n", initialTime);
+        } else if (mTriggerUpdate == 0) {
+            // If initial NTP query failed, don't spam every millisecond; retry in 10 seconds
+            mTriggerUpdate = millis() - (UPDATE_PERIOD_h * 60 * 60 * 1000) + 10000;
+        }
     }
   }
 
-  unsigned long elapsedTime = (millis() - mTriggerUpdate) / 1000; // Tiempo transcurrido en segundos
+  unsigned long elapsedTime = (mTriggerUpdate == 0) ? (millis() / 1000) : ((millis() - mTriggerUpdate) / 1000);
   unsigned long currentTime = initialTime + elapsedTime; // La hora actual
 
   // convierte la hora actual en horas, minutos y segundos

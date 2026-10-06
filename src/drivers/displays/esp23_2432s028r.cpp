@@ -279,8 +279,11 @@ void esp32_2432S028R_MinerScreen(unsigned long mElapsed)
   render.rdrawString(String(0).c_str(), 244-wdtOffset, 3, TFT_BLACK);
 
   // Print Hour
-  render.setFontSize(9);
-  render.rdrawString(data.currentTime.c_str(), 286-wdtOffset, 1, TFT_BLACK);
+  background.setTextFont(FONT2);
+  background.setTextSize(1);
+  background.setTextDatum(TR_DATUM);
+  background.setTextColor(TFT_BLACK);
+  background.drawString(data.currentTime.c_str(), 312-wdtOffset, 2, FONT2);
 
   // Push prepared background to screen
   background.pushSprite(190, 0);
